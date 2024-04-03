@@ -28,9 +28,9 @@ def generate_launch_description():
 
         Node(
             package='rviz2',
-            node_executable='rviz2',
-            node_name='rviz2',
-            node_namespace='',
+            executable='rviz2',
+            name='rviz2',
+            namespace='',
             output='screen',
             parameters=[{'use_sim_time': use_sim_time}],
             arguments=['--display-config', config_rviz2],

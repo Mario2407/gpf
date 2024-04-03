@@ -29,9 +29,9 @@ def generate_launch_description():
 
         Node(
             package='gpf',
-            node_executable='gpf',
-            node_name='gpf',
-            node_namespace='',
+            executable='gpf',
+            name='gpf',
+            namespace='',
             output='screen',
             parameters=[config_gpf],
             remappings=[('camera/pointcloud', 'camera/pointcloud'),
