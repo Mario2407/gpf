@@ -34,15 +34,18 @@ def generate_launch_description():
             namespace='',
             output='screen',
             parameters=[config_gpf],
-            remappings=[('camera/pointcloud', 'camera/pointcloud'),
+            remappings=[
+                        ('camera/pointcloud', '/zed2i_top/zed2i/point_cloud/cloud_registered'),
+                        # ('camera/pointcloud', '/livox/lidar'),
+                        # ('camera/pointcloud', '/livox/lidar/concatenated'),
                         ('visualisation_markers', 'gpf/visualisation_markers'),
                         ('geometric_primitives', 'gpf/geometric_primitives')],
         ),
 
-        IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(
-                [os.path.join(get_package_share_directory('gpf'), 'launch',
-                              'rviz2.launch.py')]),
-            launch_arguments=[('config_rviz2', config_rviz2)]
-        ),
+        # IncludeLaunchDescription(
+        #     PythonLaunchDescriptionSource(
+        #         [os.path.join(get_package_share_directory('gpf'), 'launch',
+        #                       'rviz2.launch.py')]),
+        #     launch_arguments=[('config_rviz2', config_rviz2)]
+        # ),
     ])
