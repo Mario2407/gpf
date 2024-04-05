@@ -19,11 +19,14 @@
 #include <pcl/filters/voxel_grid.h>
 #include <pcl/segmentation/supervoxel_clustering.h>
 #include <pcl/segmentation/cpc_segmentation.h>
+#include <pcl/filters/crop_box.h>
 #include <pcl/sample_consensus/sac_model_plane.h>
 #include <pcl/sample_consensus/sac_model_sphere.h>
 #include <pcl/sample_consensus/sac_model_cylinder.h>
 #include <pcl/visualization/pcl_visualizer.h>
 #include <pcl/visualization/point_cloud_color_handlers.h>
+
+#include "visualization_msgs/msg/marker.hpp"
 
 ///////////////
 /// DEFINES ///
@@ -180,6 +183,15 @@ struct Parameters
   float voxel_leaf_size_xy;
   float voxel_leaf_size_z;
 
+  // Cropbox
+  float cropbox_min_x;
+  float cropbox_max_x;
+  float cropbox_min_y;
+  float cropbox_max_y;
+  float cropbox_min_z;
+  float cropbox_max_z;
+  bool cropbox_enable;
+
   // Supervoxels
   bool use_single_camera_transform;
   float voxel_resolution;
@@ -239,6 +251,11 @@ private:
   /// Publisher of visualisation markers
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr pub_markers_;
 
+  // Debug
+  rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr pub_search_radius_marker_;
+  rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr pub_supervoxel_marker_array_;
+  rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr pub_voxel_grid_;
+
   /// PLC visualised
   pcl::visualization::PCLVisualizer::Ptr viewer_;
 
@@ -272,7 +289,15 @@ GeometricPrimitiveFitting::GeometricPrimitiveFitting() : Node(NODE_NAME)
   {
     rclcpp::QoS qos_markers = rclcpp::QoS(rclcpp::QoSInitialization::from_rmw(rmw_qos_profile_default));
     pub_markers_ = this->create_publisher<visualization_msgs::msg::MarkerArray>("visualisation_markers", qos_markers);
+
+    pub_search_radius_marker_ = this->create_publisher<visualization_msgs::msg::Marker>("search_radius_marker", qos_markers);
+
+    pub_supervoxel_marker_array_ = this->create_publisher<visualization_msgs::msg::MarkerArray>("supervoxel_marker_array", qos_markers);
   }
+
+  // Debug
+  rclcpp::QoS qos_voxel_grid = rclcpp::QoS(rclcpp::QoSInitialization::from_rmw(rmw_qos_profile_default));
+  pub_voxel_grid_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("voxel_grid", qos_voxel_grid);
 
   // Setup viewer config
   if (parameters_.visualise)
@@ -303,16 +328,38 @@ void GeometricPrimitiveFitting::point_cloud_callback(const sensor_msgs::msg::Poi
   // Preprocessing
   //
 
+  // TODO Cropbox Filter maybe (cut x to max 6m)
+  if (parameters_.cropbox_enable)
+  {
+    RCLCPP_INFO(this->get_logger(), "Points before Cropping: %d", point_cloud->size());
+    // Create the filtering object
+    pcl::CropBox<PointT> crop_box_filter;
+    crop_box_filter.setInputCloud(point_cloud);
+    crop_box_filter.setMin(Eigen::Vector4f(parameters_.cropbox_min_x, parameters_.cropbox_min_y, parameters_.cropbox_min_z, 1.0));
+    crop_box_filter.setMax(Eigen::Vector4f(parameters_.cropbox_max_x, parameters_.cropbox_max_y, parameters_.cropbox_max_z, 1.0));
+    crop_box_filter.filter(*point_cloud);
+    RCLCPP_INFO(this->get_logger(), "Points after Cropping: %d", point_cloud->size());
+  }
+
+
   // Downsample input to speed up the computations, if desired
   if (parameters_.downsample_input)
   {
+    RCLCPP_INFO(this->get_logger(), "Size before downsampling: %d", point_cloud->size());
     pcl::VoxelGrid<PointT> voxel_grid;
     voxel_grid.setInputCloud(point_cloud);
     voxel_grid.setLeafSize(parameters_.voxel_leaf_size_xy,
                            parameters_.voxel_leaf_size_xy,
                            parameters_.voxel_leaf_size_z);
     voxel_grid.filter(*point_cloud);
+    RCLCPP_INFO(this->get_logger(), "Size after downsampling: %d", point_cloud->size());
   }
+
+  // Publish voxel grid
+  sensor_msgs::msg::PointCloud2 msg_voxel_grid;
+  pcl::toROSMsg(*point_cloud, msg_voxel_grid);
+  msg_voxel_grid.header = msg_point_cloud->header;
+  pub_voxel_grid_->publish(msg_voxel_grid);
 
   //
   // Supervoxels
@@ -354,6 +401,50 @@ void GeometricPrimitiveFitting::point_cloud_callback(const sensor_msgs::msg::Poi
   // Get supervoxel adjacency
   std::multimap<std::uint32_t, std::uint32_t> supervoxel_adjacency;
   supervoxel_clustering.getSupervoxelAdjacency(supervoxel_adjacency);
+
+  // Print Parameters used for supervoxel:
+  RCLCPP_INFO(this->get_logger(), "Supervoxel parameters:");
+  RCLCPP_INFO(this->get_logger(), "\tVoxel resolution: %f", parameters_.voxel_resolution);
+  RCLCPP_INFO(this->get_logger(), "\tSeed resolution: %f", parameters_.seed_resolution);
+  RCLCPP_INFO(this->get_logger(), "Spatial importance: %f", parameters_.spatial_importance);
+  RCLCPP_INFO(this->get_logger(), "Color importance: %f", parameters_.color_importance);
+  RCLCPP_INFO(this->get_logger(), "Enable normals: %d", parameters_.enable_normals);
+  RCLCPP_INFO(this->get_logger(), "\tNormal importance: %f", parameters_.normal_importance);
+  RCLCPP_INFO(this->get_logger(), "\tNormal search radius: %f", parameters_.normal_search_radius);
+  RCLCPP_INFO(this->get_logger(), "Enable supervoxel refinement: %d", parameters_.enable_supervoxel_refinement);
+  RCLCPP_INFO(this->get_logger(), "\tSupervoxel refinement iterations: %d", parameters_.supervoxel_refinement_iterations);
+  
+
+  RCLCPP_INFO(this->get_logger(), "Number of supervoxels: %d", supervoxel_clusters.size());
+  // Publish Supervoxel Centers as marker array of points
+  visualization_msgs::msg::MarkerArray supervoxel_marker_array;
+  for (const auto &[supervoxel_id, supervoxel] : supervoxel_clusters)
+  {
+    visualization_msgs::msg::Marker marker;
+    marker.header.frame_id = msg_point_cloud->header.frame_id;
+    marker.header.stamp = rclcpp::Clock().now();
+    marker.ns = "supervoxels";
+    marker.id = supervoxel_id;
+    marker.type = visualization_msgs::msg::Marker::SPHERE;
+    marker.action = visualization_msgs::msg::Marker::ADD;
+    marker.pose.position.x = supervoxel->centroid_.x;
+    marker.pose.position.y = supervoxel->centroid_.y;
+    marker.pose.position.z = supervoxel->centroid_.z;
+    RCLCPP_INFO(this->get_logger(), "Supervoxel centroid: %f %f %f", supervoxel->centroid_.x, supervoxel->centroid_.y, supervoxel->centroid_.z);
+    marker.pose.orientation.x = 0.0;
+    marker.pose.orientation.y = 0.0;
+    marker.pose.orientation.z = 0.0;
+    marker.pose.orientation.w = 1.0;
+    marker.scale.x = parameters_.voxel_resolution;
+    marker.scale.y = parameters_.voxel_resolution;
+    marker.scale.z = parameters_.voxel_resolution;
+    marker.color.a = .2;
+    marker.color.r = 0.0;
+    marker.color.g = 1.0;
+    marker.color.b = 0.0;
+    supervoxel_marker_array.markers.push_back(marker);
+  }
+  pub_supervoxel_marker_array_->publish(supervoxel_marker_array);
 
   //
   // Segmentation
@@ -479,6 +570,30 @@ void GeometricPrimitiveFitting::point_cloud_callback(const sensor_msgs::msg::Poi
       pcl::search::KdTree<PointT>::Ptr tree_n(new pcl::search::KdTree<PointT>());
       normal_estimator.setSearchMethod(tree_n);
       normal_estimator.setRadiusSearch(parameters_.normal_search_radius);
+
+      // publish the search radius as marker
+      visualization_msgs::msg::Marker marker;
+      marker.header.frame_id = msg_point_cloud->header.frame_id;
+      marker.header.stamp = rclcpp::Clock().now();
+      marker.type = visualization_msgs::msg::Marker::SPHERE;
+      marker.action = visualization_msgs::msg::Marker::ADD;
+      marker.pose.position.x = 0.0;
+      marker.pose.position.y = 0.0;
+      marker.pose.position.z = 0.0;
+      marker.pose.orientation.x = 0.0;
+      marker.pose.orientation.y = 0.0;
+      marker.pose.orientation.z = 0.0;
+      marker.pose.orientation.w = 1.0;
+      marker.scale.x = parameters_.normal_search_radius * 2.0;
+      marker.scale.y = parameters_.normal_search_radius * 2.0;
+      marker.scale.z = parameters_.normal_search_radius * 2.0;
+      marker.color.a = 0.2;
+      marker.color.r = 1.0;
+      marker.color.g = 0.0;
+      marker.color.b = 0.0;
+      // marker->lifetime = rclcpp::Duration(0);
+      pub_search_radius_marker_->publish(marker);
+
       pcl::PointCloud<pcl::Normal>::Ptr cloud_normals(new pcl::PointCloud<pcl::Normal>());
       normal_estimator.compute(*cloud_normals);
 
@@ -830,6 +945,14 @@ void GeometricPrimitiveFitting::declare_parameters()
   parameters_.visualise = this->declare_parameter<bool>("visualise", false);
 
   // Mutable
+  parameters_.cropbox_enable = this->declare_parameter<bool>("cropbox.enable", false);
+  parameters_.cropbox_min_x = this->declare_parameter<float>("cropbox.min.x", -3.0);
+  parameters_.cropbox_min_y = this->declare_parameter<float>("cropbox.min.y", -3.0);
+  parameters_.cropbox_min_z = this->declare_parameter<float>("cropbox.min.z", -3.0);
+  parameters_.cropbox_max_x = this->declare_parameter<float>("cropbox.max.x", 10.0);
+  parameters_.cropbox_max_y = this->declare_parameter<float>("cropbox.max.y", 10.0);
+  parameters_.cropbox_max_z = this->declare_parameter<float>("cropbox.max.z", 10.0);
+
   parameters_.downsample_input = this->declare_parameter<bool>("downsampling.enable", true);
   parameters_.voxel_leaf_size_xy = this->declare_parameter<float>("downsampling.leaf_size.xy", 0.0025);
   parameters_.voxel_leaf_size_z = this->declare_parameter<float>("downsampling.leaf_size.z", 0.0025);
