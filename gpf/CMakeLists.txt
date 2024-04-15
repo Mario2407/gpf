@@ -39,6 +39,8 @@ include_directories(include ${PCL_INCLUDE_DIRS})
 
 # Executables
 set(EXECUTABLE_0 gpf)
+set(EXECUTABLE_1 ransac_cylinder)
+set(EXECUTABLE_2 show_normals)
 
 # Executable 0
 add_executable(${EXECUTABLE_0} src/${EXECUTABLE_0}.cpp)
@@ -46,8 +48,23 @@ target_link_libraries(${EXECUTABLE_0} ${PCL_LIBRARIES})
 ament_target_dependencies(${EXECUTABLE_0} rclcpp pcl_conversions sensor_msgs
                           visualization_msgs geometric_primitive_msgs)
 
+# Executable 1
+add_executable(${EXECUTABLE_1} src/${EXECUTABLE_1}.cpp)
+target_link_libraries(${EXECUTABLE_1} ${PCL_LIBRARIES})
+ament_target_dependencies(${EXECUTABLE_1} rclcpp pcl_conversions sensor_msgs
+                          visualization_msgs geometric_primitive_msgs)
+
+
+# Executable 2
+add_executable(${EXECUTABLE_2} src/${EXECUTABLE_2}.cpp)
+target_link_libraries(${EXECUTABLE_2} ${PCL_LIBRARIES})
+ament_target_dependencies(${EXECUTABLE_2} rclcpp pcl_conversions sensor_msgs
+                          visualization_msgs geometric_primitive_msgs)
+
 # Install targets
 install(TARGETS ${EXECUTABLE_0} DESTINATION lib/${PROJECT_NAME})
+install(TARGETS ${EXECUTABLE_1} DESTINATION lib/${PROJECT_NAME})
+install(TARGETS ${EXECUTABLE_2} DESTINATION lib/${PROJECT_NAME})
 # Install directories
 install(DIRECTORY config launch DESTINATION share/${PROJECT_NAME})
 
