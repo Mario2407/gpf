@@ -1,0 +1,32 @@
+/**:
+  ros__parameters:
+    # cropbox:
+    #   enable: true
+    #   min:
+    #     x: -10.0
+    #     y: -10.0
+    #     z: -10.0
+    #   max:
+    #     x: 6.0
+    #     y: 10.0
+    #     z: 10.0
+
+    downsampling:
+      enable: true
+      voxel_size: 0.04
+
+    normal_est:
+      normal_search_radius: 0.07
+      
+    sac:
+      min_points_for_cylinder: 50
+      max_iterations: 1000
+      distance_threshold: 0.1
+      min_radius: 0.05
+      max_radius: 0.6
+      probability: 0.99
+    
+    result:
+      inlier_proportion_threshold: 0.4
+
+    use_sim_time: true
