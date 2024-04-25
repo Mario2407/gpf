@@ -331,28 +331,28 @@ void GeometricPrimitiveFitting::point_cloud_callback(const sensor_msgs::msg::Poi
   // TODO Cropbox Filter maybe (cut x to max 6m)
   if (parameters_.cropbox_enable)
   {
-    RCLCPP_INFO(this->get_logger(), "Points before Cropping: %d", point_cloud->size());
+    RCLCPP_INFO(this->get_logger(), "Points before Cropping: %ld", point_cloud->size());
     // Create the filtering object
     pcl::CropBox<PointT> crop_box_filter;
     crop_box_filter.setInputCloud(point_cloud);
     crop_box_filter.setMin(Eigen::Vector4f(parameters_.cropbox_min_x, parameters_.cropbox_min_y, parameters_.cropbox_min_z, 1.0));
     crop_box_filter.setMax(Eigen::Vector4f(parameters_.cropbox_max_x, parameters_.cropbox_max_y, parameters_.cropbox_max_z, 1.0));
     crop_box_filter.filter(*point_cloud);
-    RCLCPP_INFO(this->get_logger(), "Points after Cropping: %d", point_cloud->size());
+    RCLCPP_INFO(this->get_logger(), "Points after Cropping: %ld", point_cloud->size());
   }
 
 
   // Downsample input to speed up the computations, if desired
   if (parameters_.downsample_input)
   {
-    RCLCPP_INFO(this->get_logger(), "Size before downsampling: %d", point_cloud->size());
+    RCLCPP_INFO(this->get_logger(), "Size before downsampling: %ld", point_cloud->size());
     pcl::VoxelGrid<PointT> voxel_grid;
     voxel_grid.setInputCloud(point_cloud);
     voxel_grid.setLeafSize(parameters_.voxel_leaf_size_xy,
                            parameters_.voxel_leaf_size_xy,
                            parameters_.voxel_leaf_size_z);
     voxel_grid.filter(*point_cloud);
-    RCLCPP_INFO(this->get_logger(), "Size after downsampling: %d", point_cloud->size());
+    RCLCPP_INFO(this->get_logger(), "Size after downsampling: %ld", point_cloud->size());
   }
 
   // Publish voxel grid
@@ -415,14 +415,14 @@ void GeometricPrimitiveFitting::point_cloud_callback(const sensor_msgs::msg::Poi
   RCLCPP_INFO(this->get_logger(), "\tSupervoxel refinement iterations: %d", parameters_.supervoxel_refinement_iterations);
   
 
-  RCLCPP_INFO(this->get_logger(), "Number of supervoxels: %d", supervoxel_clusters.size());
+  RCLCPP_INFO(this->get_logger(), "Number of supervoxels: %ld", supervoxel_clusters.size());
   // Publish Supervoxel Centers as marker array of points
   visualization_msgs::msg::MarkerArray supervoxel_marker_array;
   for (const auto &[supervoxel_id, supervoxel] : supervoxel_clusters)
   {
     visualization_msgs::msg::Marker marker;
     marker.header.frame_id = msg_point_cloud->header.frame_id;
-    marker.header.stamp = rclcpp::Clock().now();
+    marker.header.stamp = msg_point_cloud->header.stamp; //rclcpp::Clock().now();
     marker.ns = "supervoxels";
     marker.id = supervoxel_id;
     marker.type = visualization_msgs::msg::Marker::SPHERE;
@@ -435,13 +435,13 @@ void GeometricPrimitiveFitting::point_cloud_callback(const sensor_msgs::msg::Poi
     marker.pose.orientation.y = 0.0;
     marker.pose.orientation.z = 0.0;
     marker.pose.orientation.w = 1.0;
-    marker.scale.x = parameters_.voxel_resolution;
-    marker.scale.y = parameters_.voxel_resolution;
-    marker.scale.z = parameters_.voxel_resolution;
+    marker.scale.x = parameters_.voxel_resolution*5;
+    marker.scale.y = parameters_.voxel_resolution*5;
+    marker.scale.z = parameters_.voxel_resolution*5;
     marker.color.a = .2;
     marker.color.r = 0.0;
-    marker.color.g = 1.0;
-    marker.color.b = 0.0;
+    marker.color.g = 0.0;
+    marker.color.b = 1.0;
     supervoxel_marker_array.markers.push_back(marker);
   }
   pub_supervoxel_marker_array_->publish(supervoxel_marker_array);
@@ -507,6 +507,8 @@ void GeometricPrimitiveFitting::point_cloud_callback(const sensor_msgs::msg::Poi
   // Iterate over all segmented point clouds
   for (const auto &[segment_id, segment_cloud] : segmented_point_clouds)
   {
+
+    RCLCPP_INFO(this->get_logger(), "Segment_id: %d", segment_id);
     // Make sure the point cloud has enough points
     if (segment_cloud->size() < parameters_.sac_min_segment_size)
     {
@@ -574,7 +576,7 @@ void GeometricPrimitiveFitting::point_cloud_callback(const sensor_msgs::msg::Poi
       // publish the search radius as marker
       visualization_msgs::msg::Marker marker;
       marker.header.frame_id = msg_point_cloud->header.frame_id;
-      marker.header.stamp = rclcpp::Clock().now();
+      marker.header.stamp =  msg_point_cloud->header.stamp; //rclcpp::Clock().now();
       marker.type = visualization_msgs::msg::Marker::SPHERE;
       marker.action = visualization_msgs::msg::Marker::ADD;
       marker.pose.position.x = 0.0;
@@ -655,6 +657,7 @@ void GeometricPrimitiveFitting::point_cloud_callback(const sensor_msgs::msg::Poi
       }
       else if (consider_cylinder)
       {
+        RCLCPP_INFO(this->get_logger(), "cylinder.validity.inlier_proportion: %f", cylinder.validity.inlier_proportion);
         // Make sure the inlier proportion is satisfactory
         if (cylinder.validity.inlier_proportion < parameters_.cylinder.min_inlier_proportion)
         {
@@ -664,6 +667,7 @@ void GeometricPrimitiveFitting::point_cloud_callback(const sensor_msgs::msg::Poi
 
         // Initialise cylinder from the coefficients and segment id
         cylinder.init(segment_id);
+        RCLCPP_INFO(this->get_logger(), "Segment_id: %d", segment_id);
 
         // Extract cylinder limits from the associated pointcloud inliers
         // First create a hyperplane that intersects the cylinder, while being parallel with its flat surfaces
