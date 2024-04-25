@@ -14,22 +14,22 @@ gpf:
     downsampling:
       enable: true
       leaf_size:
-        xy: 0.1
-        z: 0.1
+        xy: 0.02
+        z: 0.02
 
     supervoxel:
     # https://pcl.readthedocs.io/projects/tutorials/en/latest/supervoxel_clustering.html
     # https://www.sciencedirect.com/science/article/pii/S0924271618301370
       use_single_camera_transform: true
-      voxel_resolution: 1.
-      seed_resolution: 3.
+      voxel_resolution: .2
+      seed_resolution: 1.
       importance:
         spatial: 1.0
         color: 0.
       normal:
         enable: true
-        importance: 4.0
-        search_radius: 10.
+        importance: 1.0
+        search_radius: .05
       refinement:
         enable: true
         iterations: 5
@@ -44,12 +44,20 @@ gpf:
         sanity_criterion: true
       cpc:
       # https://openaccess.thecvf.com/content_cvpr_2015/papers/Schoeler_Constrained_Planar_Cuts_2015_CVPR_paper.pdf
+      # /** \brief Determines if we want to use cutting planes
+      #  *  \param[in] max_cuts Maximum number of cuts
+      #  *  \param[in] cutting_min_segments Minimum segment size for cutting
+      #  *  \param[in] cutting_min_score Minimum score a proposed cut has to achieve for being performed
+      #  *  \param[in] locally_constrained Decide if we constrain our cuts locally
+      #  *  \param[in] directed_cutting Decide if we prefer cuts perpendicular to the edge-direction
+      #  *  \param[in] clean_cutting Decide if we cut only edges with supervoxels on opposite sides of the plane (clean) or all edges within the seed_resolution_ distance to the plane (not clean). The later was used in the paper.
+      #  */
         max_cuts: 1000
-        cutting_min_segments: 100
-        cutting_min_score: 0.15
-        local_constrain: true
-        directed_cutting: true
-        clean_cutting: true
+        cutting_min_segments: 1
+        cutting_min_score: 0.05
+        local_constrain: false
+        directed_cutting: false
+        clean_cutting: false
         ransac_iterations: 2000
 
     sample_consensus:
@@ -59,7 +67,7 @@ gpf:
         distance_threshold: 0.005
         probability: 0.99
         max_iterations: 1000
-        min_inlier_proportion: 0.85
+        min_inlier_proportion: 0.02
         merge_precision: 0.25
       sphere:
         enable: false
@@ -71,13 +79,18 @@ gpf:
         max_radius: 2.
       cylinder:
         enable: true
-        distance_threshold: 0.2
+        # Depends on the resolution of your point cloud. 
+        # setDistanceThreshold tells RANSAC the maximum distance from the model to a potential inlier point.
+        # So the value for setDistanceThreshold should be larger than the resolution, but not too large.
+        distance_threshold: 0.08
+        # Desired probability of choosing at least one sample free from outliers (user given parameter).
         probability: 0.99
-        max_iterations: 1000
-        min_inlier_proportion: 1.5
+        max_iterations: 2000
+        # if (cylinder.validity.inlier_proportion < parameters_.cylinder.min_inlier_proportion) return .... consider false
+        min_inlier_proportion: 0.05
         min_radius: 0.05
         max_radius: 3.
 
     publish_markers: true
     visualise: false
-    use_sim_time: false
+    use_sim_time: true
