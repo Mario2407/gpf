@@ -77,14 +77,18 @@ public:
   CylinderEstimationNode() : Node("ransac_cylinder")
   {
     // Initialize subscriber to point cloud topic
+    // set qos, so that only one message is in queue
+    rmw_qos_profile_t depth_one_qos_profile = rmw_qos_profile_sensor_data;
+    depth_one_qos_profile.depth = 1;
+    auto depth_one_qos = rclcpp::QoS(rclcpp::QoSInitialization::from_rmw(depth_one_qos_profile));
+
     pointcloud_subscriber_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
-        "/zed2i/left/logs/log_pointcloud", 10,
+        "/zed2i/left/logs/log_pointcloud", depth_one_qos,
         std::bind(&CylinderEstimationNode::pointcloudCallback, this, std::placeholders::_1));
 
     // Initialize publisher for marker array
     marker_publisher_ = this->create_publisher<visualization_msgs::msg::MarkerArray>(
         "/ransac/log_cylinder_markers", 10);
-
     
     rclcpp::QoS qos_voxel_grid = rclcpp::QoS(rclcpp::QoSInitialization::from_rmw(rmw_qos_profile_default));
     pub_voxel_grid_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/ransac/log_pc_voxel_grid", qos_voxel_grid);
@@ -152,12 +156,6 @@ private:
     // Create a vector to store the detected cylinders
     std::vector<Cylinder> cylinders;
 
-    // Create sample consensus obj.
-    SampleConsensusEstimator::Ptr sac;
-
-    // Create sample consensus models
-    pcl::SampleConsensusModelCylinder<PointT, pcl::Normal>::Ptr sac_model_cylinder;
-
     // Create new consideration of the geometric primitives
     Cylinder cylinder;
 
@@ -187,6 +185,13 @@ private:
     // For each color
     for (const auto &pair : color_to_cloud_map)
     {
+
+      // Create sample consensus obj.
+      SampleConsensusEstimator::Ptr sac;
+
+      // Create sample consensus models
+      pcl::SampleConsensusModelCylinder<PointT, pcl::Normal>::Ptr sac_model_cylinder;
+
       // Get the point cloud for the color
       pcl::PointCloud<pcl::PointXYZRGB>::Ptr color_cloud = pair.second;
 
